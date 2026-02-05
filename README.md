@@ -2,7 +2,7 @@
 
 ## Usage
 
-First thee iwe, on NixOS, you want to create some writable paths for the container.
+First, on NixOS, you want to create some writable paths for the container.
 Add this to your `configuration.nix`:
 
 ```
