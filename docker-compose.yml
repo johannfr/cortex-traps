@@ -1,0 +1,69 @@
+services:
+  cortex-xdr:
+    image: debian:trixie-slim
+    container_name: cortex_agent
+    privileged: true
+    restart: always
+    network_mode: "host"
+    pid: "host" # This allows Cortex to see all host processes
+    volumes:
+      # The .deb file to install
+      - ./package:/tmp/cortex-package:ro
+      # Bind mount the host root so it can scan files (read-only)
+      - /:/host:ro
+      # Persistent directories for the agent installation
+      - /var/lib/cortex-agent/traps:/var/lib/traps
+      - /var/log/cortex-agent:/var/log/traps
+      - /proc/config.gz:/tmp/config.gz:ro
+    working_dir: /opt/traps
+    environment:
+      - DEBIAN_FRONTEND=noninteractive
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        apt update
+        apt upgrade -y
+        apt-get install -y \
+        procps \
+        libselinux1 \
+        libsemanage2 \
+        dialog \
+        libreadline8 \
+        apt-utils \
+        openssl \
+        libssl3 \
+        ca-certificates \
+        libssl-dev \
+        nftables \
+        iptables \
+        strace \
+        wget \
+        python3
+
+        wget https://raw.githubusercontent.com/gdraheim/docker-systemctl-replacement/master/files/docker/systemctl3.py -O /usr/bin/systemctl
+        chmod +x /usr/bin/systemctl
+
+        zcat /tmp/config.gz > /boot/config-$(uname -r)
+
+        mkdir -p /etc/panw
+        cp /tmp/cortex-package/cortex.conf /etc/panw
+
+        dpkg -i $(ls /tmp/cortex-package/cortex*.deb | tail -n 1)
+        systemctl enable traps_pmd
+        systemctl start traps_pmd
+        while ! /opt/traps/bin/cytool connectivity_test ; do
+          for i in $(seq 3 -1 1) ; do
+            echo "Retrying connectivity_test in $${i}..."
+            sleep 1
+          done
+        done
+
+        while ! /opt/traps/bin/cytool checkin ; do
+          for i in $(seq 3 -1 1) ; do
+            echo "Retrying checkin in $${i}..."
+            sleep 1
+          done
+        done
+        echo "Done. Agent is running."
+        tail -f /dev/null
